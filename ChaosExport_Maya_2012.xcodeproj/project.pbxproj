@@ -6,20 +6,100 @@
 	objectVersion = 46;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		741CD1E51566487000466E99 /* ChaosExport.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 741CD1E31566487000466E99 /* ChaosExport.cpp */; };
+		741CD1E61566487000466E99 /* ChaosExport.h in Headers */ = {isa = PBXBuildFile; fileRef = 741CD1E41566487000466E99 /* ChaosExport.h */; };
+		744A4B4D1569EA0C0037F7C9 /* tinyxml2.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 744A4B4B1569EA0C0037F7C9 /* tinyxml2.cpp */; };
+		744A4B4E1569EA0C0037F7C9 /* tinyxml2.h in Headers */ = {isa = PBXBuildFile; fileRef = 744A4B4C1569EA0C0037F7C9 /* tinyxml2.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		741CD1D61566425700466E99 /* chaosExport.bundle */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = chaosExport.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		741CD1E31566487000466E99 /* ChaosExport.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = ChaosExport.cpp; path = src/ChaosExport.cpp; sourceTree = "<group>"; };
+		741CD1E41566487000466E99 /* ChaosExport.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ChaosExport.h; path = src/ChaosExport.h; sourceTree = "<group>"; };
+		744A4B4B1569EA0C0037F7C9 /* tinyxml2.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = tinyxml2.cpp; path = src/tinyxml2.cpp; sourceTree = "<group>"; };
+		744A4B4C1569EA0C0037F7C9 /* tinyxml2.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = tinyxml2.h; path = src/tinyxml2.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		741CD1D31566425700466E99 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
 		74F4B49315663A76001BEBBA = {
 			isa = PBXGroup;
 			children = (
+				74F4B49C15663A9D001BEBBA /* src */,
+				74F4B4A215663B65001BEBBA /* Products */,
 			);
 			sourceTree = "<group>";
 		};
+		74F4B49C15663A9D001BEBBA /* src */ = {
+			isa = PBXGroup;
+			children = (
+				741CD1E31566487000466E99 /* ChaosExport.cpp */,
+				741CD1E41566487000466E99 /* ChaosExport.h */,
+				744A4B4B1569EA0C0037F7C9 /* tinyxml2.cpp */,
+				744A4B4C1569EA0C0037F7C9 /* tinyxml2.h */,
+			);
+			name = src;
+			sourceTree = "<group>";
+		};
+		74F4B4A215663B65001BEBBA /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				741CD1D61566425700466E99 /* chaosExport.bundle */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		741CD1D41566425700466E99 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				741CD1E61566487000466E99 /* ChaosExport.h in Headers */,
+				744A4B4E1569EA0C0037F7C9 /* tinyxml2.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		741CD1D51566425700466E99 /* chaosExport */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 741CD1D71566425800466E99 /* Build configuration list for PBXNativeTarget "chaosExport" */;
+			buildPhases = (
+				741CD1D41566425700466E99 /* Headers */,
+				741CD1D21566425700466E99 /* Sources */,
+				741CD1D31566425700466E99 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = chaosExport;
+			productName = chaosExport;
+			productReference = 741CD1D61566425700466E99 /* chaosExport.bundle */;
+			productType = "com.apple.product-type.library.dynamic";
+		};
+/* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
 		74F4B49515663A76001BEBBA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				CLASSPREFIX = Chs;
 				LastUpgradeCheck = 0430;
+				ORGANIZATIONNAME = sniperbat.net;
 			};
 			buildConfigurationList = 74F4B49815663A76001BEBBA /* Build configuration list for PBXProject "ChaosExport_Maya_2012" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -29,29 +109,168 @@
 				en,
 			);
 			mainGroup = 74F4B49315663A76001BEBBA;
+			productRefGroup = 74F4B4A215663B65001BEBBA /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
+				741CD1D51566425700466E99 /* chaosExport */,
 			);
 		};
 /* End PBXProject section */
 
+/* Begin PBXSourcesBuildPhase section */
+		741CD1D21566425700466E99 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				741CD1E51566487000466E99 /* ChaosExport.cpp in Sources */,
+				744A4B4D1569EA0C0037F7C9 /* tinyxml2.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
 /* Begin XCBuildConfiguration section */
+		741CD1D81566425800466E99 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				CLANG_ENABLE_OBJC_ARC = NO;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DYLIB_COMPATIBILITY_VERSION = "";
+				DYLIB_CURRENT_VERSION = "";
+				EXECUTABLE_EXTENSION = bundle;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_VERSION = A;
+				GCC_C_LANGUAGE_STANDARD = "compiler-default";
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_MODEL_TUNING = GS;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = NO;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_MASTER_OBJECT_FILE = YES;
+				MACH_O_TYPE = mh_bundle;
+				MACOSX_DEPLOYMENT_TARGET = "";
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "";
+				USER_HEADER_SEARCH_PATHS = "$(MAYA_DIRECTORY)/devkit/include/";
+				WARNING_LDFLAGS = "";
+				WRAPPER_EXTENSION = "";
+				ZERO_LINK = YES;
+			};
+			name = Debug;
+		};
+		741CD1D91566425800466E99 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = YES;
+				CLANG_ENABLE_OBJC_ARC = NO;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DYLIB_COMPATIBILITY_VERSION = "";
+				DYLIB_CURRENT_VERSION = "";
+				EXECUTABLE_EXTENSION = bundle;
+				EXECUTABLE_PREFIX = "";
+				FRAMEWORK_VERSION = A;
+				GCC_C_LANGUAGE_STANDARD = "compiler-default";
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_MODEL_TUNING = GS;
+				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = NO;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = NO;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_MASTER_OBJECT_FILE = YES;
+				MACH_O_TYPE = mh_bundle;
+				MACOSX_DEPLOYMENT_TARGET = "";
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "";
+				USER_HEADER_SEARCH_PATHS = "$(MAYA_DIRECTORY)/devkit/include/";
+				WARNING_LDFLAGS = "";
+				WRAPPER_EXTENSION = "";
+				ZERO_LINK = NO;
+			};
+			name = Release;
+		};
 		74F4B49A15663A77001BEBBA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "$(MAYA_DIRECTORY)/devkit/include/maya/OpenMayaMac.h";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					MAC_PLUGIN,
+					_BOOL,
+					REQUIRE_IOSTREAM,
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(MAYA_DIRECTORY)/devkit/include/",
+					/Users/toseuser/Documents/boost_1_49_0,
+				);
+				LIBRARY_SEARCH_PATHS = "$(MAYA_DIRECTORY)/Maya.app/Contents/MacOS";
+				LIBRARY_STYLE = BUNDLE;
+				MAYA_DIRECTORY = /Applications/Autodesk/maya2012;
+				OTHER_LDFLAGS = (
+					"-lFoundation",
+					"-lOpenMaya",
+					"-Wl,-executable_path,$(MAYA_DIRECTORY)/Maya.app/Contents/MacOS",
+					"-lOpenMayaAnim",
+				);
 			};
 			name = Debug;
 		};
 		74F4B49B15663A77001BEBBA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "$(MAYA_DIRECTORY)/devkit/include/maya/OpenMayaMac.h";
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					MAC_PLUGIN,
+					_BOOL,
+					REQUIRE_IOSTREAM,
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(MAYA_DIRECTORY)/devkit/include/",
+					/Users/toseuser/Documents/boost_1_49_0,
+				);
+				LIBRARY_SEARCH_PATHS = "$(MAYA_DIRECTORY)/Maya.app/Contents/MacOS";
+				LIBRARY_STYLE = BUNDLE;
+				MAYA_DIRECTORY = /Applications/Autodesk/maya2012;
+				OTHER_LDFLAGS = (
+					"-lFoundation",
+					"-lOpenMaya",
+					"-Wl,-executable_path,$(MAYA_DIRECTORY)/Maya.app/Contents/MacOS",
+					"-lOpenMayaAnim",
+				);
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		741CD1D71566425800466E99 /* Build configuration list for PBXNativeTarget "chaosExport" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				741CD1D81566425800466E99 /* Debug */,
+				741CD1D91566425800466E99 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		74F4B49815663A76001BEBBA /* Build configuration list for PBXProject "ChaosExport_Maya_2012" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -59,7 +278,7 @@
 				74F4B49B15663A77001BEBBA /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
+			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
 	};
