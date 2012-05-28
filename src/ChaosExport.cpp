@@ -127,7 +127,7 @@ void writeBinaryPartToFile( ofstream & newFile ){
 void writeXMLPartToFile( ofstream & newFile ){
   tinyxml2::XMLPrinter printer;
   xmlFile.Print( &printer );
-  int xmlFileSize = printer.SizeOfCStr();
+  int xmlFileSize = printer.CStrSize();
   xmlFileSize = ( xmlFileSize + 3 ) / 4 * 4;//address align
   boost::scoped_ptr<char> xmlBuffer( new char[xmlFileSize] );
   memcpy( xmlBuffer.get(), printer.CStr(), xmlFileSize );
