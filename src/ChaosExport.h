@@ -3,6 +3,7 @@
 //--------------------------------------------------------------------------------------------------
 #include <maya/MPxFileTranslator.h>
 #include <maya/MFStream.h>
+
 //--------------------------------------------------------------------------------------------------
 class ChaosExport : public MPxFileTranslator {
 public:
@@ -15,6 +16,12 @@ public:
 	MString defaultExtension( void ) const;
   MFileKind	identifyFile( const MFileObject &, const char *buffer, short size )const;
 	inline static void * creator( void );
+  
+  enum Format{
+    UNKNOWN_FORMAT = -1,
+    XML_FORMAT,
+    BINARY_FORMAT,
+  };
 };
 
 //--------------------------------------------------------------------------------------------------

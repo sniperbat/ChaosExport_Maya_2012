@@ -16,6 +16,8 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/assign.hpp>
+#include <boost/foreach.hpp>
+#include <boost/lexical_cast.hpp>
 using namespace boost::assign;
 #include <limits.h>
 
@@ -34,7 +36,7 @@ struct ChsMesh{
   std::vector<unsigned int> uiIndexArray;
 };
 static std::vector< boost::shared_ptr<ChsMesh> > meshList;
-
+ChaosExport::Format format;
 //--------------------------------------------------------------------------------------------------
 struct Attribute{
   MString id;
@@ -125,13 +127,15 @@ void writeBinaryPartToFile( ofstream & newFile ){
 }
 //--------------------------------------------------------------------------------------------------
 void writeXMLPartToFile( ofstream & newFile ){
-  tinyxml2::XMLPrinter printer;
+  tinyxml2::XMLPrinter printer( NULL, false );
   xmlFile.Print( &printer );
   int xmlFileSize = printer.CStrSize();
-  xmlFileSize = ( xmlFileSize + 3 ) / 4 * 4;//address align
+  if( ChaosExport::BINARY_FORMAT == format ){
+    xmlFileSize = ( xmlFileSize + 3 ) / 4 * 4;//address align
+    writeValueToFile( newFile, &xmlFileSize,1);
+  }
   boost::scoped_ptr<char> xmlBuffer( new char[xmlFileSize] );
   memcpy( xmlBuffer.get(), printer.CStr(), xmlFileSize );
-  writeValueToFile( newFile, &xmlFileSize,1);
   writeValueToFile( newFile, xmlBuffer.get(), xmlFileSize );
 }
 
@@ -144,9 +148,11 @@ MStatus writeToFile( const MString & fullFileName ){
   }
   //enable automatic flushing of the output stream after any output operation
   newFile.setf( ios::unitbuf );
-  writeValueToFile( newFile, magicHeader.asChar(),magicHeader.length() );
+  if( ChaosExport::BINARY_FORMAT == format )
+    writeValueToFile( newFile, magicHeader.asChar(),magicHeader.length() );
   writeXMLPartToFile( newFile );
-  writeBinaryPartToFile( newFile );
+  if( ChaosExport::BINARY_FORMAT == format )
+    writeBinaryPartToFile( newFile );
   newFile.flush();
   newFile.close();
   return MStatus::kSuccess;
@@ -179,6 +185,21 @@ void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEle
   indexElement->SetAttribute( "isShort" , mesh->isShort );
   int count = mesh->isShort ? mesh->usIndexArray.size() : mesh->uiIndexArray.size();
   indexElement->SetAttribute( "count" , count );
+  if( ChaosExport::XML_FORMAT == format ){
+    std::string textStr;
+    if( mesh->isShort ){
+      BOOST_FOREACH( unsigned short & value , mesh->usIndexArray )
+        textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+      tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+      indexElement->InsertEndChild( text );
+    }
+    else{
+      BOOST_FOREACH( unsigned int & value , mesh->uiIndexArray )
+        textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+      tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+      indexElement->InsertEndChild( text );
+    }
+  }
   meshElement->InsertEndChild( indexElement );  
 }
 
@@ -187,6 +208,13 @@ void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEl
   tinyxml2::XMLElement * vertexElement = xmlFile.NewElement( "ChsVertexBuffer" );
   int count = mesh->vertexArray.size();
   vertexElement->SetAttribute( "count" , count );
+  if( ChaosExport::XML_FORMAT == format ){
+    std::string textStr;
+    BOOST_FOREACH( float & value , mesh->vertexArray )
+      textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+    tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+    vertexElement->InsertEndChild( text );
+  }
   meshElement->InsertEndChild( vertexElement );
 }
 
@@ -312,6 +340,9 @@ MStatus prepareXMLWithSelection( void ){
 
 //--------------------------------------------------------------------------------------------------
 MStatus ChaosExport::writer( const MFileObject &file,	const MString &/*options*/,	FileAccessMode mode ){
+  
+  format = BINARY_FORMAT;
+  
   bool isExportSelection;
   MStatus status;
   if( MStatus::kFailure == checkExportSelection( mode, isExportSelection ) )
