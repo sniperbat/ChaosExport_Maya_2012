@@ -100,28 +100,31 @@ void initXMLFile( void ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void writeBinaryToFile( ofstream & newFile ){
+void writeBinaryPartToFile( ofstream & newFile ){
   int meshCount = meshList.size();
   //write vertex and index data
   for( int meshIdx = 0; meshIdx < meshCount; meshIdx++ ){
     boost::shared_ptr<ChsMesh> & mesh = meshList[meshIdx];
-    int sizeOfVertexArray = mesh->vertexArray.size()*sizeof(float);
-    writeValueToFile( newFile, &sizeOfVertexArray, 1 );
-    writeValueToFile( newFile, mesh->vertexArray.data(), mesh->vertexArray.size() );
+    int countOfVertex = mesh->vertexArray.size();
+    int sizeOfVertex =  countOfVertex * sizeof( float );
+    writeValueToFile( newFile, &sizeOfVertex, 1 );
+    writeValueToFile( newFile, mesh->vertexArray.data(), countOfVertex );
     if( mesh->isShort ){
-      int sizeOfIndexArray = mesh->usIndexArray.size()*sizeof(unsigned short);
-      writeValueToFile( newFile, &sizeOfIndexArray, 1 );
-      writeValueToFile( newFile, (unsigned short*)mesh->usIndexArray.data(), mesh->usIndexArray.size() );
+      int countOfIndex = mesh->usIndexArray.size();
+      int sizeOfIndex = countOfIndex * sizeof( unsigned short );
+      writeValueToFile( newFile, &sizeOfIndex, 1 );
+      writeValueToFile( newFile, mesh->usIndexArray.data(), countOfIndex );
     }
     else{
-      int sizeOfIndexArray = mesh->uiIndexArray.size()*sizeof(unsigned int);
-      writeValueToFile( newFile, &sizeOfIndexArray, 1 );
-      writeValueToFile( newFile, mesh->uiIndexArray.data(), mesh->uiIndexArray.size() );
+      int countOfIndex = mesh->uiIndexArray.size();
+      int sizeOfIndex = countOfIndex * sizeof( unsigned int );
+      writeValueToFile( newFile, &sizeOfIndex, 1 );
+      writeValueToFile( newFile, mesh->uiIndexArray.data(), countOfIndex );
     }
   }
 }
 //--------------------------------------------------------------------------------------------------
-void writeXMLToFile( ofstream & newFile ){
+void writeXMLPartToFile( ofstream & newFile ){
   tinyxml2::XMLPrinter printer;
   xmlFile.Print( &printer );
   int xmlFileSize = printer.SizeOfCStr();
@@ -142,8 +145,8 @@ MStatus writeToFile( const MString & fullFileName ){
   //enable automatic flushing of the output stream after any output operation
   newFile.setf( ios::unitbuf );
   writeValueToFile( newFile, magicHeader.asChar(),magicHeader.length() );
-  writeXMLToFile( newFile );
-  writeBinaryToFile( newFile );
+  writeXMLPartToFile( newFile );
+  writeBinaryPartToFile( newFile );
   newFile.flush();
   newFile.close();
   return MStatus::kSuccess;
@@ -174,15 +177,16 @@ void makeMaterialElement( tinyxml2::XMLElement * meshElement ){
 void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
   tinyxml2::XMLElement * indexElement = xmlFile.NewElement( "ChsIndexBuffer" );
   indexElement->SetAttribute( "isShort" , mesh->isShort );
-  int size = mesh->isShort ? mesh->usIndexArray.size() : mesh->uiIndexArray.size();
-  indexElement->SetAttribute( "count" , size );
+  int count = mesh->isShort ? mesh->usIndexArray.size() : mesh->uiIndexArray.size();
+  indexElement->SetAttribute( "count" , count );
   meshElement->InsertEndChild( indexElement );  
 }
 
 //--------------------------------------------------------------------------------------------------
 void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
   tinyxml2::XMLElement * vertexElement = xmlFile.NewElement( "ChsVertexBuffer" );
-  vertexElement->SetAttribute( "count" , static_cast<int>( mesh->vertexArray.size() ) );
+  int count = mesh->vertexArray.size();
+  vertexElement->SetAttribute( "count" , count );
   meshElement->InsertEndChild( vertexElement );
 }
 
