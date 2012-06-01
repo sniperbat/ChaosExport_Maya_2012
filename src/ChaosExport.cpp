@@ -30,26 +30,28 @@ static MString extension = "chsmodel";
 static MString magicHeader = "chmo";
 
 struct ChsMesh{
-  std::vector<float> vertexArray;
   bool isShort;
+  bool hasVertexColor;
+
+  std::vector<float> vertexArray;
   std::vector<unsigned short> usIndexArray;
   std::vector<unsigned int> uiIndexArray;
 };
 static std::vector< boost::shared_ptr<ChsMesh> > meshList;
 ChaosExport::Format format;
 //--------------------------------------------------------------------------------------------------
-struct Attribute{
-  MString id;
-  MString stride;
-  MString type;
-};
-
 enum{
   POSITION,
   NORMAL,
   COLOR,
   TEXCOORD0,
   TEXCOORD1,
+};
+
+struct Attribute{
+  MString id;
+  MString stride;
+  MString type;
 };
 
 static Attribute attributes[]={
@@ -168,7 +170,16 @@ void makeAttributeElement( int type, tinyxml2::XMLElement * meshElement ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeMaterialElement( tinyxml2::XMLElement * meshElement ){
+template <typename T> void makePropertyElement( const MString & name ,const MString & type, T value, tinyxml2::XMLElement * materialElement ){
+  tinyxml2::XMLElement * propertyElement = xmlFile.NewElement( "ChsProperty" );
+  propertyElement->SetAttribute( "name", name.asChar() );
+  propertyElement->SetAttribute( "type", type.asChar() );
+  propertyElement->SetAttribute( "value", value );
+  materialElement->InsertEndChild( propertyElement );
+}
+
+//--------------------------------------------------------------------------------------------------
+void makeMaterialElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
   tinyxml2::XMLElement * materialElement = xmlFile.NewElement( "ChsMaterial" );
   meshElement->InsertEndChild( materialElement );
   tinyxml2::XMLElement * shaderElement = xmlFile.NewElement( "ChsVertexShader" );
@@ -177,6 +188,8 @@ void makeMaterialElement( tinyxml2::XMLElement * meshElement ){
   shaderElement = xmlFile.NewElement( "ChsFragmentShader" );
   shaderElement->SetAttribute( "src", "Shader.fsh" );
   materialElement->InsertEndChild( shaderElement );
+  makePropertyElement( "hasVertexColor", "bool", mesh->hasVertexColor, materialElement );
+  //makePropertyElement( "hasTexture", "bool", mesh->hasTexture, materialElement );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -226,9 +239,12 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
   {
     makeAttributeElement( POSITION, meshElement );
     makeAttributeElement( NORMAL, meshElement );
+    if( mesh->hasVertexColor ){
+      makeAttributeElement( COLOR, meshElement );
+    }
     makeVertexBufferElement( mesh, meshElement );
     makeIndexBufferElement( mesh, meshElement );
-    makeMaterialElement( meshElement );
+    makeMaterialElement( mesh, meshElement );
   }
   modelElement->InsertEndChild( meshElement );
 }
@@ -252,8 +268,11 @@ void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void getVertexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   int numVertices = fnMesh.numVertices();
+  mesh->hasVertexColor = fnMesh.numColors() > 0;
+  MColorArray colors;
+  fnMesh.getVertexColors( colors );
   for( int vertexId = 0; vertexId < numVertices; vertexId++ ){
     MPoint pos;
     MVector normal;
@@ -261,11 +280,14 @@ void getVertexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
     mesh->vertexArray += pos.x, pos.y,pos.z;
     fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kWorld );
     mesh->vertexArray += normal.x, normal.y,normal.z;
+    if( mesh->hasVertexColor ){
+      mesh->vertexArray += colors[vertexId].r, colors[vertexId].g, colors[vertexId].b, colors[vertexId].a;
+    }
   }
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeBinaryPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   getVertexData( fnMesh, mesh );
   getIndexData( fnMesh, mesh );
 }
