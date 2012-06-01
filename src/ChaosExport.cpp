@@ -169,11 +169,28 @@ void makeAttributeElement( int type, tinyxml2::XMLElement * meshElement ){
   meshElement->InsertEndChild( colorAttributeElement );
 }
 
+//------------------------------------------------------------------------------------------------
+enum ChsShaderUniformDataType {
+  CHS_SHADER_UNIFORM_1_FLOAT,
+  CHS_SHADER_UNIFORM_1_INT,
+  CHS_SHADER_UNIFORM_VEC2_FLOAT,
+  CHS_SHADER_UNIFORM_VEC2_INT,
+  CHS_SHADER_UNIFORM_VEC3_FLOAT,
+  CHS_SHADER_UNIFORM_VEC3_INT,
+  CHS_SHADER_UNIFORM_VEC4_FLOAT,
+  CHS_SHADER_UNIFORM_VEC4_INT,
+  CHS_SHADER_UNIFORM_MAT2,
+  CHS_SHADER_UNIFORM_MAT3,
+  CHS_SHADER_UNIFORM_MAT4,
+};
+
 //--------------------------------------------------------------------------------------------------
-template <typename T> void makePropertyElement( const MString & name ,const MString & type, T value, tinyxml2::XMLElement * materialElement ){
+template <typename T> void makePropertyElement( const MString & name , ChsShaderUniformDataType type,
+                                               unsigned int count, T value, tinyxml2::XMLElement * materialElement ){
   tinyxml2::XMLElement * propertyElement = xmlFile.NewElement( "ChsProperty" );
   propertyElement->SetAttribute( "name", name.asChar() );
-  propertyElement->SetAttribute( "type", type.asChar() );
+  propertyElement->SetAttribute( "type", type );
+  propertyElement->SetAttribute( "count", count );
   propertyElement->SetAttribute( "value", value );
   materialElement->InsertEndChild( propertyElement );
 }
@@ -188,7 +205,7 @@ void makeMaterialElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElemen
   shaderElement = xmlFile.NewElement( "ChsFragmentShader" );
   shaderElement->SetAttribute( "src", "Shader.fsh" );
   materialElement->InsertEndChild( shaderElement );
-  makePropertyElement( "hasVertexColor", "bool", mesh->hasVertexColor, materialElement );
+  makePropertyElement( "hasVertexColor", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasVertexColor, materialElement );
   //makePropertyElement( "hasTexture", "bool", mesh->hasTexture, materialElement );
 }
 
