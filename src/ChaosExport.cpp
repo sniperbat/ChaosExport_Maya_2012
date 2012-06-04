@@ -10,6 +10,7 @@
 #include <maya/MVector.h>
 #include <maya/MPoint.h>
 #include <maya/MIntArray.h>
+#include <maya/MFloatArray.h>
 
 #include <vector>
 #include <boost/any.hpp>
@@ -23,6 +24,7 @@ using namespace boost::assign;
 
 #include "ChaosExport.h"
 #include "tinyxml2.h"
+
 //--------------------------------------------------------------------------------------------------
 static tinyxml2::XMLDocument xmlFile;
 static tinyxml2::XMLElement * modelElement = NULL;
@@ -32,20 +34,27 @@ static MString magicHeader = "chmo";
 struct ChsMesh{
   bool isShort;
   bool hasVertexColor;
+  bool hasUV;
+  bool hasTexture;
 
   std::vector<float> vertexArray;
   std::vector<unsigned short> usIndexArray;
   std::vector<unsigned int> uiIndexArray;
 };
 static std::vector< boost::shared_ptr<ChsMesh> > meshList;
-ChaosExport::Format format;
+
+enum Format{
+  UNKNOWN_FORMAT = -1,
+  XML_FORMAT,
+  BINARY_FORMAT,
+}format;
+
 //--------------------------------------------------------------------------------------------------
 enum{
   POSITION,
   NORMAL,
-  COLOR,
   TEXCOORD0,
-  TEXCOORD1,
+  COLOR,
 };
 
 struct Attribute{
@@ -57,9 +66,8 @@ struct Attribute{
 static Attribute attributes[]={
   {    "position",    "3",    "GL_FLOAT"  },
   {    "normal",      "3",    "GL_FLOAT"  },
-  {    "vertexColor", "4",    "GL_FLOAT"  },
   {    "texcoord0",   "2",    "GL_FLOAT"  },
-  {    "texcoord1",   "2",    "GL_FLOAT"  },
+  {    "vertexColor", "4",    "GL_FLOAT"  },
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -127,12 +135,13 @@ void writeBinaryPartToFile( ofstream & newFile ){
     }
   }
 }
+
 //--------------------------------------------------------------------------------------------------
 void writeXMLPartToFile( ofstream & newFile ){
   tinyxml2::XMLPrinter printer( NULL, false );
   xmlFile.Print( &printer );
   int xmlFileSize = printer.CStrSize();
-  if( ChaosExport::BINARY_FORMAT == format ){
+  if( BINARY_FORMAT == format ){
     xmlFileSize = ( xmlFileSize + 3 ) / 4 * 4;//address align
     writeValueToFile( newFile, &xmlFileSize,1);
   }
@@ -150,10 +159,10 @@ MStatus writeToFile( const MString & fullFileName ){
   }
   //enable automatic flushing of the output stream after any output operation
   newFile.setf( ios::unitbuf );
-  if( ChaosExport::BINARY_FORMAT == format )
+  if( BINARY_FORMAT == format )
     writeValueToFile( newFile, magicHeader.asChar(),magicHeader.length() );
   writeXMLPartToFile( newFile );
-  if( ChaosExport::BINARY_FORMAT == format )
+  if( BINARY_FORMAT == format )
     writeBinaryPartToFile( newFile );
   newFile.flush();
   newFile.close();
@@ -206,7 +215,7 @@ void makeMaterialElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElemen
   shaderElement->SetAttribute( "src", "Shader.fsh" );
   materialElement->InsertEndChild( shaderElement );
   makePropertyElement( "hasVertexColor", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasVertexColor, materialElement );
-  //makePropertyElement( "hasTexture", "bool", mesh->hasTexture, materialElement );
+  makePropertyElement( "hasTexture", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasTexture, materialElement );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -215,7 +224,7 @@ void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEle
   indexElement->SetAttribute( "isShort" , mesh->isShort );
   int count = mesh->isShort ? mesh->usIndexArray.size() : mesh->uiIndexArray.size();
   indexElement->SetAttribute( "count" , count );
-  if( ChaosExport::XML_FORMAT == format ){
+  if( XML_FORMAT == format ){
     std::string textStr;
     if( mesh->isShort ){
       BOOST_FOREACH( unsigned short & value , mesh->usIndexArray )
@@ -238,7 +247,7 @@ void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEl
   tinyxml2::XMLElement * vertexElement = xmlFile.NewElement( "ChsVertexBuffer" );
   int count = mesh->vertexArray.size();
   vertexElement->SetAttribute( "count" , count );
-  if( ChaosExport::XML_FORMAT == format ){
+  if( XML_FORMAT == format ){
     std::string textStr;
     BOOST_FOREACH( float & value , mesh->vertexArray )
       textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
@@ -256,9 +265,10 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
   {
     makeAttributeElement( POSITION, meshElement );
     makeAttributeElement( NORMAL, meshElement );
-    if( mesh->hasVertexColor ){
+    if( mesh->hasUV && mesh->hasTexture )
+      makeAttributeElement( TEXCOORD0, meshElement );
+    if( mesh->hasVertexColor )
       makeAttributeElement( COLOR, meshElement );
-    }
     makeVertexBufferElement( mesh, meshElement );
     makeIndexBufferElement( mesh, meshElement );
     makeMaterialElement( mesh, meshElement );
@@ -288,6 +298,9 @@ void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   int numVertices = fnMesh.numVertices();
   mesh->hasVertexColor = fnMesh.numColors() > 0;
+  MFloatArray uArray, vArray;
+  if( ( mesh->hasUV = fnMesh.numUVs() )>0 && mesh->hasTexture )
+    fnMesh.getUVs( uArray, vArray );
   MColorArray colors;
   fnMesh.getVertexColors( colors );
   for( int vertexId = 0; vertexId < numVertices; vertexId++ ){
@@ -297,9 +310,10 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
     mesh->vertexArray += pos.x, pos.y,pos.z;
     fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kWorld );
     mesh->vertexArray += normal.x, normal.y,normal.z;
-    if( mesh->hasVertexColor ){
+    if( mesh->hasUV && mesh->hasTexture )
+      mesh->vertexArray += uArray[vertexId], vArray[vertexId];
+    if( mesh->hasVertexColor )
       mesh->vertexArray += colors[vertexId].r, colors[vertexId].g, colors[vertexId].b, colors[vertexId].a;
-    }
   }
 }
 
@@ -316,6 +330,7 @@ MStatus processMesh( MDagPath & dagPath ){
   if( MStatus::kFailure == status)
     return MStatus::kFailure;
   boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
+  MGlobal::displayInfo( "mesh-----------------------------" );
   meshList.push_back( mesh );
   makeBinaryPart( fnMesh, mesh );
   makeXMLPart( fnMesh, mesh, modelElement );
@@ -379,7 +394,7 @@ MStatus prepareXMLWithSelection( void ){
 
 //--------------------------------------------------------------------------------------------------
 MStatus ChaosExport::writer( const MFileObject &file,	const MString &/*options*/,	FileAccessMode mode ){
-  
+  meshList.clear();
   format = BINARY_FORMAT;
   
   bool isExportSelection;

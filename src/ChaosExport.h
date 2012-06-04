@@ -16,12 +16,6 @@ public:
 	MString defaultExtension( void ) const;
   MFileKind	identifyFile( const MFileObject &, const char *buffer, short size )const;
 	inline static void * creator( void );
-  
-  enum Format{
-    UNKNOWN_FORMAT = -1,
-    XML_FORMAT,
-    BINARY_FORMAT,
-  };
 };
 
 //--------------------------------------------------------------------------------------------------
