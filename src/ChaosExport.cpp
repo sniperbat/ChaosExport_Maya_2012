@@ -11,6 +11,9 @@
 #include <maya/MPoint.h>
 #include <maya/MIntArray.h>
 #include <maya/MFloatArray.h>
+#include <maya/MFnDagNode.h>
+#include <maya/MFnSet.h>
+#include <maya/MPlugArray.h>
 
 #include <vector>
 #include <boost/any.hpp>
@@ -72,25 +75,25 @@ static Attribute attributes[]={
 
 //--------------------------------------------------------------------------------------------------
 template<typename T> void writeValueToFile( std::ofstream & ofs, T * value, int count ){
-	ofs.write( (const char * )value, sizeof(T) * count );
+  ofs.write( (const char * )value, sizeof(T) * count );
 }
 
 //--------------------------------------------------------------------------------------------------
 bool isVisible( MFnDagNode & fnDag, MStatus & status ){
-	if( fnDag.isIntermediateObject() )
-		return false;
-	MPlug visPlug = fnDag.findPlug("visibility", &status);
-	if( MStatus::kFailure == status ){
-		MGlobal::displayError("MPlug::findPlug");
-		return false;
-	}
+  if( fnDag.isIntermediateObject() )
+    return false;
+  MPlug visPlug = fnDag.findPlug("visibility", &status);
+  if( MStatus::kFailure == status ){
+    MGlobal::displayError("MPlug::findPlug");
+    return false;
+  }
   else{
-		bool visible;
-		status = visPlug.getValue(visible);
-		if( MStatus::kFailure == status )
-			MGlobal::displayError("MPlug::getValue");
-		return visible;
-	}
+    bool visible;
+    status = visPlug.getValue(visible);
+    if( MStatus::kFailure == status )
+      MGlobal::displayError("MPlug::getValue");
+    return visible;
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -326,11 +329,37 @@ void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 //--------------------------------------------------------------------------------------------------
 MStatus processMesh( MDagPath & dagPath ){
   MStatus status;
+  MFnDagNode dagNode( dagPath, &status );
+  if ( dagNode.isIntermediateObject() || 
+      !dagPath.hasFn( MFn::kMesh ) ||
+       dagPath.hasFn( MFn::kTransform ) )
+    return MStatus::kFailure;
+  
   MFnMesh fnMesh( dagPath, &status );
   if( MStatus::kFailure == status)
     return MStatus::kFailure;
+  
+  unsigned int instanceNumber = dagPath.instanceNumber();
+  MObjectArray sets;
+  MObjectArray components;
+  fnMesh.getConnectedSetsAndMembers( instanceNumber, sets, components, true );
+  unsigned int setLength = sets.length();
+  
+  for( unsigned int i = 0; i < setLength; i++ ){
+    MObject set = sets[i];
+    MObject component = components[i];
+    MFnSet fnSet( set );
+    MFnDependencyNode dnSet( set );
+    MObject surfaceShaderAttr = dnSet.attribute( MString( "surfaceShader" ) );
+    MPlug surfaceShaderPlug( set, surfaceShaderAttr );
+    MPlugArray srcPlugArray;
+    surfaceShaderPlug.connectedTo( srcPlugArray, true, false );
+    if( srcPlugArray.length() == 0 )
+      continue;
+    
+  }
+  
   boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
-  MGlobal::displayInfo( "mesh-----------------------------" );
   meshList.push_back( mesh );
   makeBinaryPart( fnMesh, mesh );
   makeXMLPart( fnMesh, mesh, modelElement );
@@ -341,55 +370,55 @@ MStatus processMesh( MDagPath & dagPath ){
 MStatus prepareXMLWithAll( void ){
   MGlobal::displayInfo("prepareXMLWithAll");
   MStatus status;
-	MItDag itDag( MItDag::kDepthFirst, MFn::kMesh, &status );
-	if( MStatus::kFailure == status ) {
-		MGlobal::displayError("MItDag::MItDag");
-		return MStatus::kFailure;
-	}
+  MItDag itDag( MItDag::kDepthFirst, MFn::kMesh, &status );
+  if( MStatus::kFailure == status ) {
+    MGlobal::displayError("MItDag::MItDag");
+    return MStatus::kFailure;
+  }
   if( !itDag.instanceCount( true ) ){
     MGlobal::displayInfo("nothing to export!");
-		return MStatus::kFailure;
+    return MStatus::kFailure;
   }
-	while( !itDag.isDone() ){
-		MDagPath dagPath;
-		if( MStatus::kFailure == itDag.getPath(dagPath) ){
-			MGlobal::displayError("MDagPath::getPath");
-			return MStatus::kFailure;
-		}
-    
-		MFnDagNode visibleTester( dagPath );
+  while( !itDag.isDone() ){
+    MDagPath dagPath;
+    if( MStatus::kFailure == itDag.getPath(dagPath) ){
+      MGlobal::displayError("MDagPath::getPath");
+      return MStatus::kFailure;
+    }
+
+    MFnDagNode visibleTester( dagPath );
     if( isVisible( visibleTester, status ) && MStatus::kSuccess == status ){
       if( MStatus::kFailure == processMesh( dagPath ) )
         continue;
     }
     itDag.next();
   }
-	return MStatus::kSuccess;
+  return MStatus::kSuccess;
 }
 
 //--------------------------------------------------------------------------------------------------
 MStatus prepareXMLWithSelection( void ){
   MGlobal::displayInfo("prepareXMLWithSelection");
-	MSelectionList selectionList;
-	if(MStatus::kFailure == MGlobal::getActiveSelectionList(selectionList)){
-		MGlobal::displayError("MGlobal::getActiveSelectionList");
-		return MStatus::kFailure;
-	}
+  MSelectionList selectionList;
+  if(MStatus::kFailure == MGlobal::getActiveSelectionList(selectionList)){
+    MGlobal::displayError("MGlobal::getActiveSelectionList");
+    return MStatus::kFailure;
+  }
   MStatus status;
-	MItSelectionList itSelectionList(selectionList, MFn::kMesh, &status);	
-	if(MStatus::kFailure == status)
-		return MStatus::kFailure;
-  
-	for( itSelectionList.reset(); !itSelectionList.isDone(); itSelectionList.next() ){
-		MDagPath dagPath;
-		if(MStatus::kFailure == itSelectionList.getDagPath(dagPath)) {
-			MGlobal::displayError("MItSelectionList::getDagPath");
-			return MStatus::kFailure;
-		}
-		if( MStatus::kFailure == processMesh( dagPath ) )
-			continue;
-	}
-	return MStatus::kSuccess;
+  MItSelectionList itSelectionList(selectionList, MFn::kMesh, &status);	
+  if(MStatus::kFailure == status)
+    return MStatus::kFailure;
+
+  for( itSelectionList.reset(); !itSelectionList.isDone(); itSelectionList.next() ){
+    MDagPath dagPath;
+    if(MStatus::kFailure == itSelectionList.getDagPath(dagPath)) {
+      MGlobal::displayError("MItSelectionList::getDagPath");
+      return MStatus::kFailure;
+    }
+    if( MStatus::kFailure == processMesh( dagPath ) )
+      continue;
+  }
+  return MStatus::kSuccess;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -432,39 +461,39 @@ MStatus ChaosExport::writer( const MFileObject &file,	const MString &/*options*/
 
 //--------------------------------------------------------------------------------------------------
 MPxFileTranslator::MFileKind ChaosExport::identifyFile( const MFileObject &file, const char * , short )const{
-	MString name = file.name();
-	int nameLength = name.length();
+  MString name = file.name();
+  int nameLength = name.length();
   int extensionLength = extension.length();
-	if ( nameLength > extensionLength )
+  if ( nameLength > extensionLength )
     if( name.substring( nameLength - extensionLength, nameLength ) == extension )
       return kIsMyFileType;
-	return kNotMyFileType;
+  return kNotMyFileType;
 }
 
 //--------------------------------------------------------------------------------------------------
 MString ChaosExport::defaultExtension( void ) const{
-	return extension;
+  return extension;
 }
 
 //--------------------------------------------------------------------------------------------------
 //	Plugin management
 //--------------------------------------------------------------------------------------------------
 MStatus initializePlugin( MObject obj ){
-	MStatus status;
-	MFnPlugin plugin( obj, "sniperbat", "1.0", "Any" );
-	status = plugin.registerFileTranslator ( "chaosExport", const_cast<char*>( "none" ), ChaosExport::creator );
+  MStatus status;
+  MFnPlugin plugin( obj, "sniperbat", "1.0", "Any" );
+  status = plugin.registerFileTranslator ( "chaosExport", const_cast<char*>( "none" ), ChaosExport::creator );
   if( !status )
     status.perror( "registerFileTranslator" );
-	return status;
+  return status;
 }
 
 //--------------------------------------------------------------------------------------------------
 MStatus uninitializePlugin( MObject obj ){
-	MFnPlugin plugin( obj );
-	MStatus status = plugin.deregisterFileTranslator( "chaosExport" );
+  MFnPlugin plugin( obj );
+  MStatus status = plugin.deregisterFileTranslator( "chaosExport" );
   if( !status )
     status.perror( "deregisterFileTranslator" );
-	return status;
+  return status;
 }
 
 //--------------------------------------------------------------------------------------------------
