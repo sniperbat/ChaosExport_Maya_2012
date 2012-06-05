@@ -62,15 +62,16 @@ enum{
 
 struct Attribute{
   MString id;
-  MString stride;
+  int stride;
   MString type;
+  int index;
 };
 
 static Attribute attributes[]={
-  {    "position",    "3",    "GL_FLOAT"  },
-  {    "normal",      "3",    "GL_FLOAT"  },
-  {    "texcoord0",   "2",    "GL_FLOAT"  },
-  {    "vertexColor", "4",    "GL_FLOAT"  },
+  {    "position",    3,    "GL_FLOAT", 0 },
+  {    "normal",      3,    "GL_FLOAT", 1  },
+  {    "texcoord0",   2,    "GL_FLOAT", 2  },
+  {    "vertexColor", 4,    "GL_FLOAT", 3  },
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -174,11 +175,12 @@ MStatus writeToFile( const MString & fullFileName ){
 
 //--------------------------------------------------------------------------------------------------
 void makeAttributeElement( int type, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * colorAttributeElement = xmlFile.NewElement( "ChsAttribute" );
-  colorAttributeElement->SetAttribute( "id", attributes[type].id.asChar() );
-  colorAttributeElement->SetAttribute( "stride", attributes[type].stride.asChar() );
-  colorAttributeElement->SetAttribute( "type", attributes[type].type.asChar() );
-  meshElement->InsertEndChild( colorAttributeElement );
+  tinyxml2::XMLElement * attributeElement = xmlFile.NewElement( "ChsAttribute" );
+  attributeElement->SetAttribute( "id", attributes[type].id.asChar() );
+  attributeElement->SetAttribute( "stride", attributes[type].stride );
+  attributeElement->SetAttribute( "type", attributes[type].type.asChar() );
+  attributeElement->SetAttribute( "index", attributes[type].index );
+  meshElement->InsertEndChild( attributeElement );
 }
 
 //------------------------------------------------------------------------------------------------
@@ -208,7 +210,87 @@ template <typename T> void makePropertyElement( const MString & name , ChsShader
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeMaterialElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
+template <typename T> void makePropertyElement( const MString & name , ChsShaderUniformDataType type,
+                                               unsigned int count, std::vector<T> valueArray,
+                                               tinyxml2::XMLElement * materialElement ){
+  std::string valueStr;
+  BOOST_FOREACH( T & value , valueArray )
+  valueStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+  makePropertyElement( name, type, count, valueStr.c_str(), materialElement );
+}
+
+//--------------------------------------------------------------------------------------------------
+enum{
+  DIFFUSE_COLOR,
+};
+
+//--------------------------------------------------------------------------------------------------
+struct MaterialChannel{
+  const MString channelName;
+  const MString uniformName;
+  std::string textureFileName;
+  const int activeUnit;
+  MaterialChannel( const MString & cName, const MString & uName, int au ):
+    channelName( cName ), uniformName( uName ), activeUnit( au ){
+      r=g=b=1.0;
+  }
+  double r, g, b;
+};
+
+MaterialChannel materialChannels[]={
+  MaterialChannel( "color", "diffuse", 0 ),
+  MaterialChannel( "ambientColor", "ambient", 1 ),
+};
+
+//--------------------------------------------------------------------------------------------------
+void getMaterialAttributeAtChannel( int channelIndex, MFnDependencyNode fnMaterial ){
+  MPlug channelPlug;
+  MPlugArray plugs;
+  MaterialChannel & materialChannel = materialChannels[channelIndex];
+  channelPlug = fnMaterial.findPlug( materialChannel.channelName );
+  channelPlug.connectedTo( plugs, true,false );
+  materialChannel.textureFileName.clear();
+  if( plugs.length() > 0 ){
+    MObject obj = plugs[0].node();
+		if( obj.apiType() == MFn::kFileTexture ){
+      MFnDependencyNode fnFile( obj );
+      MPlug ftnPlug = fnFile.findPlug("fileTextureName");
+      MString texFilenameStr;
+      ftnPlug.getValue( texFilenameStr );
+      std::string textureFileName = texFilenameStr.asChar();
+      int found = textureFileName.find_last_of("/");
+      materialChannel.textureFileName = textureFileName.substr( found+1 );
+    }
+  }
+  else {
+    //just output colors
+    channelPlug.child( 0 ).getValue( materialChannel.r );
+    channelPlug.child( 1 ).getValue( materialChannel.g );
+    channelPlug.child( 2 ).getValue( materialChannel.b );
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+void makeMaterialAttribute( int channelIndex, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * materialElement ){
+  const MaterialChannel & materialChannel = materialChannels[channelIndex];
+  if( !materialChannel.textureFileName.empty() ){
+    tinyxml2::XMLElement * textureElement = xmlFile.NewElement( "ChsTexture2D" );
+    textureElement->SetAttribute( "src", materialChannel.textureFileName.c_str() );
+    MString sampleName = materialChannel.uniformName + "Texture";
+    textureElement->SetAttribute( "sampleName", sampleName.asChar() );
+    textureElement->SetAttribute( "activeUnit", materialChannel.activeUnit );
+    materialElement->InsertEndChild( textureElement );
+  }
+  else{
+    MString colorName = materialChannel.uniformName + "Color";
+    std::vector<float> rgb;
+    rgb += materialChannel.r, materialChannel.g, materialChannel.b, 1.0;
+    makePropertyElement( colorName, CHS_SHADER_UNIFORM_VEC4_FLOAT, 1, rgb, materialElement );
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+void makeMaterialElement( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
   tinyxml2::XMLElement * materialElement = xmlFile.NewElement( "ChsMaterial" );
   meshElement->InsertEndChild( materialElement );
   tinyxml2::XMLElement * shaderElement = xmlFile.NewElement( "ChsVertexShader" );
@@ -219,6 +301,7 @@ void makeMaterialElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElemen
   materialElement->InsertEndChild( shaderElement );
   makePropertyElement( "hasVertexColor", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasVertexColor, materialElement );
   makePropertyElement( "hasTexture", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasTexture, materialElement );
+  makeMaterialAttribute( DIFFUSE_COLOR, mesh, materialElement );
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -265,17 +348,15 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
   tinyxml2::XMLElement * meshElement = xmlFile.NewElement( "ChsMesh" );
   MString meshId = fnMesh.name();
   meshElement->SetAttribute( "id", meshId.asChar() );
-  {
-    makeAttributeElement( POSITION, meshElement );
-    makeAttributeElement( NORMAL, meshElement );
-    if( mesh->hasUV && mesh->hasTexture )
-      makeAttributeElement( TEXCOORD0, meshElement );
-    if( mesh->hasVertexColor )
-      makeAttributeElement( COLOR, meshElement );
-    makeVertexBufferElement( mesh, meshElement );
-    makeIndexBufferElement( mesh, meshElement );
-    makeMaterialElement( mesh, meshElement );
-  }
+  makeAttributeElement( POSITION, meshElement );
+  makeAttributeElement( NORMAL, meshElement );
+  if( mesh->hasUV && mesh->hasTexture )
+    makeAttributeElement( TEXCOORD0, meshElement );
+  if( mesh->hasVertexColor )
+    makeAttributeElement( COLOR, meshElement );
+  makeVertexBufferElement( mesh, meshElement );
+  makeIndexBufferElement( mesh, meshElement );
+  makeMaterialElement( fnMesh, mesh, meshElement );
   modelElement->InsertEndChild( meshElement );
 }
 
@@ -313,8 +394,14 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
     mesh->vertexArray += pos.x, pos.y,pos.z;
     fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kWorld );
     mesh->vertexArray += normal.x, normal.y,normal.z;
-    if( mesh->hasUV && mesh->hasTexture )
+    if( mesh->hasUV && mesh->hasTexture ){
       mesh->vertexArray += uArray[vertexId], vArray[vertexId];
+      MString info = "u:";
+      info += uArray[vertexId];
+      info += "v:";
+      info += vArray[vertexId];
+      MGlobal::displayInfo( info );
+    }
     if( mesh->hasVertexColor )
       mesh->vertexArray += colors[vertexId].r, colors[vertexId].g, colors[vertexId].b, colors[vertexId].a;
   }
@@ -339,27 +426,19 @@ MStatus processMesh( MDagPath & dagPath ){
   if( MStatus::kFailure == status)
     return MStatus::kFailure;
   
-  unsigned int instanceNumber = dagPath.instanceNumber();
-  MObjectArray sets;
-  MObjectArray components;
-  fnMesh.getConnectedSetsAndMembers( instanceNumber, sets, components, true );
-  unsigned int setLength = sets.length();
-  
-  for( unsigned int i = 0; i < setLength; i++ ){
-    MObject set = sets[i];
-    MObject component = components[i];
-    MFnSet fnSet( set );
-    MFnDependencyNode dnSet( set );
-    MObject surfaceShaderAttr = dnSet.attribute( MString( "surfaceShader" ) );
-    MPlug surfaceShaderPlug( set, surfaceShaderAttr );
-    MPlugArray srcPlugArray;
-    surfaceShaderPlug.connectedTo( srcPlugArray, true, false );
-    if( srcPlugArray.length() == 0 )
-      continue;
-    
-  }
-  
+  MObjectArray shaders;
+  MIntArray faceIndices;
+  fnMesh.getConnectedShaders( 0, shaders, faceIndices );
+  MFnDependencyNode fnShader( shaders[0]);
+  MPlug surfaceShader = fnShader.findPlug("surfaceShader");
+  MPlugArray materials;
+  surfaceShader.connectedTo( materials, true, true);
+  MObject materialNode = materials[0].node();
+  getMaterialAttributeAtChannel( DIFFUSE_COLOR, materialNode );
+
   boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
+  mesh->hasTexture = materialChannels[DIFFUSE_COLOR].textureFileName.empty() ? false : true;
+  
   meshList.push_back( mesh );
   makeBinaryPart( fnMesh, mesh );
   makeXMLPart( fnMesh, mesh, modelElement );
