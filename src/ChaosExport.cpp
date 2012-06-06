@@ -64,14 +64,13 @@ struct Attribute{
   MString id;
   int stride;
   MString type;
-  int index;
 };
 
 static Attribute attributes[]={
-  {    "position",    3,    "GL_FLOAT", 0 },
-  {    "normal",      3,    "GL_FLOAT", 1  },
-  {    "texcoord0",   2,    "GL_FLOAT", 2  },
-  {    "vertexColor", 4,    "GL_FLOAT", 3  },
+  { "position",    3, "GL_FLOAT" },
+  { "normal",      3, "GL_FLOAT" },
+  { "texcoord0",   2, "GL_FLOAT" },
+  { "vertexColor", 4, "GL_FLOAT" },
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -179,7 +178,6 @@ void makeAttributeElement( int type, tinyxml2::XMLElement * meshElement ){
   attributeElement->SetAttribute( "id", attributes[type].id.asChar() );
   attributeElement->SetAttribute( "stride", attributes[type].stride );
   attributeElement->SetAttribute( "type", attributes[type].type.asChar() );
-  attributeElement->SetAttribute( "index", attributes[type].index );
   meshElement->InsertEndChild( attributeElement );
 }
 
@@ -361,47 +359,75 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
 }
 
 //--------------------------------------------------------------------------------------------------
+struct VertexUnit{
+  int vertexId;
+  int uvId;
+};
+
+std::vector< VertexUnit > vertexList;
+//--------------------------------------------------------------------------------------------------
 void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   int numPolygons = fnMesh.numPolygons();
   mesh->isShort = ( numPolygons * 3 < USHRT_MAX );
+  vertexList.clear();
+  
   for( int polygonId = 0; polygonId < numPolygons; polygonId++ ){
     MIntArray vertexListOfPolygon;
     fnMesh.getPolygonVertices( polygonId, vertexListOfPolygon );
     int vertexCountOfPolygon = vertexListOfPolygon.length();
     for( int vertexIndex = 0; vertexIndex < vertexCountOfPolygon; vertexIndex++ ){
       int vertexId = vertexListOfPolygon[vertexIndex];
+      int uvId;
+      fnMesh.getPolygonUVid( polygonId, vertexIndex, uvId );
+
+      int index = -1;
+      int indexCount = 0;
+      BOOST_FOREACH( VertexUnit & unit, vertexList ){
+        if( unit.uvId == uvId && unit.vertexId == vertexId ){
+          index = indexCount;
+          break;
+        }
+        indexCount++;
+      }
+      if( index == -1 ){
+        VertexUnit unit;
+        unit.uvId = uvId;
+        unit.vertexId = vertexId;
+        index = vertexList.size();
+        vertexList += unit;
+      }
       if( mesh->isShort )
-        mesh->usIndexArray += vertexId;
+        mesh->usIndexArray += index;
       else
-        mesh->uiIndexArray += vertexId;
+        mesh->uiIndexArray += index;
     }
   }
 }
 
 //--------------------------------------------------------------------------------------------------
 void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
-  int numVertices = fnMesh.numVertices();
-  mesh->hasVertexColor = fnMesh.numColors() > 0;
+  //check uv
+  mesh->hasUV = fnMesh.numUVs() > 0;
   MFloatArray uArray, vArray;
-  if( ( mesh->hasUV = fnMesh.numUVs() )>0 && mesh->hasTexture )
+  if( mesh->hasUV && mesh->hasTexture )
     fnMesh.getUVs( uArray, vArray );
+  //check vertex color
+  mesh->hasVertexColor = fnMesh.numColors() > 0;
   MColorArray colors;
-  fnMesh.getVertexColors( colors );
-  for( int vertexId = 0; vertexId < numVertices; vertexId++ ){
+  if( mesh->hasVertexColor )
+    fnMesh.getVertexColors( colors );
+  BOOST_FOREACH( VertexUnit & unit, vertexList ){
+    int vertexId = unit.vertexId;
+    int uvId = unit.uvId;
     MPoint pos;
     MVector normal;
     fnMesh.getPoint( vertexId, pos, MSpace::kWorld );
+    pos.cartesianize();
     mesh->vertexArray += pos.x, pos.y,pos.z;
     fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kWorld );
     mesh->vertexArray += normal.x, normal.y,normal.z;
-    if( mesh->hasUV && mesh->hasTexture ){
-      mesh->vertexArray += uArray[vertexId], vArray[vertexId];
-      MString info = "u:";
-      info += uArray[vertexId];
-      info += "v:";
-      info += vArray[vertexId];
-      MGlobal::displayInfo( info );
-    }
+    if( mesh->hasUV && mesh->hasTexture )
+      mesh->vertexArray += uArray[uvId], vArray[uvId];
     if( mesh->hasVertexColor )
       mesh->vertexArray += colors[vertexId].r, colors[vertexId].g, colors[vertexId].b, colors[vertexId].a;
   }
@@ -409,8 +435,8 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 
 //--------------------------------------------------------------------------------------------------
 void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
-  getVertexData( fnMesh, mesh );
   getIndexData( fnMesh, mesh );
+  getVertexData( fnMesh, mesh );
 }
 
 //--------------------------------------------------------------------------------------------------
