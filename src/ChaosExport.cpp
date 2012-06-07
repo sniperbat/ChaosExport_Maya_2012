@@ -14,6 +14,7 @@
 #include <maya/MFnDagNode.h>
 #include <maya/MFnSet.h>
 #include <maya/MPlugArray.h>
+#include <maya/MMatrix.h>
 
 #include <vector>
 #include <boost/any.hpp>
@@ -43,6 +44,7 @@ struct ChsMesh{
   std::vector<float> vertexArray;
   std::vector<unsigned short> usIndexArray;
   std::vector<unsigned int> uiIndexArray;
+  float transform[4][4];
 };
 static std::vector< boost::shared_ptr<ChsMesh> > meshList;
 
@@ -141,7 +143,7 @@ void writeBinaryPartToFile( ofstream & newFile ){
 
 //--------------------------------------------------------------------------------------------------
 void writeXMLPartToFile( ofstream & newFile ){
-  tinyxml2::XMLPrinter printer( NULL, false );
+  tinyxml2::XMLPrinter printer( NULL, true );
   xmlFile.Print( &printer );
   int xmlFileSize = printer.CStrSize();
   if( BINARY_FORMAT == format ){
@@ -342,6 +344,19 @@ void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEl
 }
 
 //--------------------------------------------------------------------------------------------------
+void makeTransformElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
+  tinyxml2::XMLElement * transformElement = xmlFile.NewElement( "ChsMatrix" );
+  transformElement->SetAttribute( "id", "transform" );
+  std::string textStr;
+  for( int i=0;i<4;i++)
+    for( int j=0;j<4;j++)
+      textStr.append( boost::lexical_cast<std::string>( mesh->transform[i][j] ) ).append( " " );
+  tinyxml2::XMLText * valueText = xmlFile.NewText( textStr.c_str() );
+  transformElement->InsertEndChild( valueText );
+  meshElement->InsertEndChild( transformElement );
+}
+
+//--------------------------------------------------------------------------------------------------
 void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * modelElement ){
   tinyxml2::XMLElement * meshElement = xmlFile.NewElement( "ChsMesh" );
   MString meshId = fnMesh.name();
@@ -354,6 +369,7 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
     makeAttributeElement( COLOR, meshElement );
   makeVertexBufferElement( mesh, meshElement );
   makeIndexBufferElement( mesh, meshElement );
+  makeTransformElement( mesh, meshElement );
   makeMaterialElement( fnMesh, mesh, meshElement );
   modelElement->InsertEndChild( meshElement );
 }
@@ -421,10 +437,10 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
     int uvId = unit.uvId;
     MPoint pos;
     MVector normal;
-    fnMesh.getPoint( vertexId, pos, MSpace::kWorld );
+    fnMesh.getPoint( vertexId, pos, MSpace::kObject );
     pos.cartesianize();
     mesh->vertexArray += pos.x, pos.y,pos.z;
-    fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kWorld );
+    fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kObject );
     mesh->vertexArray += normal.x, normal.y,normal.z;
     if( mesh->hasUV && mesh->hasTexture )
       mesh->vertexArray += uArray[uvId], vArray[uvId];
@@ -440,6 +456,19 @@ void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
+void processMaterial( MFnMesh & fnMesh ){
+  MObjectArray shaders;
+  MIntArray faceIndices;
+  fnMesh.getConnectedShaders( 0, shaders, faceIndices );
+  MFnDependencyNode fnShader( shaders[0]);
+  MPlug surfaceShader = fnShader.findPlug("surfaceShader");
+  MPlugArray materials;
+  surfaceShader.connectedTo( materials, true, true);
+  MObject materialNode = materials[0].node();
+  getMaterialAttributeAtChannel( DIFFUSE_COLOR, materialNode );
+}
+
+//--------------------------------------------------------------------------------------------------
 MStatus processMesh( MDagPath & dagPath ){
   MStatus status;
   MFnDagNode dagNode( dagPath, &status );
@@ -451,19 +480,14 @@ MStatus processMesh( MDagPath & dagPath ){
   MFnMesh fnMesh( dagPath, &status );
   if( MStatus::kFailure == status)
     return MStatus::kFailure;
-  
-  MObjectArray shaders;
-  MIntArray faceIndices;
-  fnMesh.getConnectedShaders( 0, shaders, faceIndices );
-  MFnDependencyNode fnShader( shaders[0]);
-  MPlug surfaceShader = fnShader.findPlug("surfaceShader");
-  MPlugArray materials;
-  surfaceShader.connectedTo( materials, true, true);
-  MObject materialNode = materials[0].node();
-  getMaterialAttributeAtChannel( DIFFUSE_COLOR, materialNode );
+
+  processMaterial( fnMesh );
 
   boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
   mesh->hasTexture = materialChannels[DIFFUSE_COLOR].textureFileName.empty() ? false : true;
+  MMatrix transform = dagPath.inclusiveMatrix();
+  
+  transform.get( mesh->transform );
   
   meshList.push_back( mesh );
   makeBinaryPart( fnMesh, mesh );
