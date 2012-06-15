@@ -15,6 +15,10 @@
 #include <maya/MFnSet.h>
 #include <maya/MPlugArray.h>
 #include <maya/MMatrix.h>
+#include <maya/MAnimUtil.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MDistance.h>
 
 #include <vector>
 #include <boost/any.hpp>
@@ -40,12 +44,38 @@ struct ChsMesh{
   bool hasVertexColor;
   bool hasUV;
   bool hasTexture;
-
   std::vector<float> vertexArray;
   std::vector<unsigned short> usIndexArray;
   std::vector<unsigned int> uiIndexArray;
   float transform[4][4];
+  
+  void addPosition( const MPoint & pos ){
+    this->vertexArray += pos.x, pos.y, pos.z;
+  }
+  
+  void addNormal( const MVector & normal ){
+    this->vertexArray += normal.x, normal.y, normal.z;    
+  }
+  
+  void addUV( float u, float v){
+    this->vertexArray += u, v; 
+  }
+  
+  void addColor( const MColor & color ){
+    this->vertexArray += color.r, color.g, color.b, color.a;
+  }
+  
+  void addIndexValue( int indexValue ){
+    if( isShort ){
+      this->usIndexArray += indexValue;
+    }
+    else {
+      this->uiIndexArray += indexValue;
+    }
+  }
+  
 };
+
 static std::vector< boost::shared_ptr<ChsMesh> > meshList;
 
 enum Format{
@@ -75,37 +105,62 @@ static Attribute attributes[]={
   { "vertexColor", 4, "GL_FLOAT" },
 };
 
+
+//--------------------------------------------------------------------------------------------------
+enum ChsAnimCurveName{
+  CHS_ANIMCURVE_VISIBILITY,
+  CHS_ANIMCURVE_SX,
+  CHS_ANIMCURVE_SY,
+  CHS_ANIMCURVE_SZ,
+  CHS_ANIMCURVE_RX,
+  CHS_ANIMCURVE_RY,
+  CHS_ANIMCURVE_RZ,
+  CHS_ANIMCURVE_TX,
+  CHS_ANIMCURVE_TY,
+  CHS_ANIMCURVE_TZ,
+  CHS_ANIMCURVE_MAX,
+  CHS_ANIMCURVE_INVALID = -1,
+};
+
+//--------------------------------------------------------------------------------------------------
+static const MString animCurveNames[CHS_ANIMCURVE_MAX] = {
+  "visibility",
+  "scaleX",
+  "scaleY",
+  "scaleZ",
+  "rotationX",
+  "rotationY",
+  "rotationZ",
+  "translationX",
+  "translationY",
+  "translationZ",
+};
+
+//--------------------------------------------------------------------------------------------------
+struct AnimCurve{
+  float time;
+  int type;
+  float value;
+};
+
+std::vector<AnimCurve> animCurveList[CHS_ANIMCURVE_MAX];
+
 //--------------------------------------------------------------------------------------------------
 template<typename T> void writeValueToFile( std::ofstream & ofs, T * value, int count ){
   ofs.write( (const char * )value, sizeof(T) * count );
 }
 
 //--------------------------------------------------------------------------------------------------
-bool isVisible( MFnDagNode & fnDag, MStatus & status ){
-  if( fnDag.isIntermediateObject() )
-    return false;
-  MPlug visPlug = fnDag.findPlug("visibility", &status);
-  if( MStatus::kFailure == status ){
-    MGlobal::displayError("MPlug::findPlug");
-    return false;
+MStatus checkExportSelection( MPxFileTranslator::FileAccessMode mode, bool & isExportSelection ){
+  if( MPxFileTranslator::kExportAccessMode == mode ){
+    isExportSelection = false;
+  }
+  else if( MPxFileTranslator::kExportActiveAccessMode == mode ){
+    isExportSelection = true;
   }
   else{
-    bool visible;
-    status = visPlug.getValue(visible);
-    if( MStatus::kFailure == status )
-      MGlobal::displayError("MPlug::getValue");
-    return visible;
-  }
-}
-
-//--------------------------------------------------------------------------------------------------
-MStatus checkExportSelection( MPxFileTranslator::FileAccessMode mode, bool & isExportSelection ){
-  if( MPxFileTranslator::kExportAccessMode == mode )
-    isExportSelection = false;
-  else if( MPxFileTranslator::kExportActiveAccessMode == mode )
-    isExportSelection = true;
-  else
     return MStatus::kFailure;
+  }
   return MStatus::kSuccess;
 }
 
@@ -164,11 +219,13 @@ MStatus writeToFile( const MString & fullFileName ){
   }
   //enable automatic flushing of the output stream after any output operation
   newFile.setf( ios::unitbuf );
-  if( BINARY_FORMAT == format )
+  if( BINARY_FORMAT == format ){
     writeValueToFile( newFile, magicHeader.asChar(),magicHeader.length() );
+  }
   writeXMLPartToFile( newFile );
-  if( BINARY_FORMAT == format )
+  if( BINARY_FORMAT == format ){
     writeBinaryPartToFile( newFile );
+  }
   newFile.flush();
   newFile.close();
   return MStatus::kSuccess;
@@ -313,14 +370,16 @@ void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEle
   if( XML_FORMAT == format ){
     std::string textStr;
     if( mesh->isShort ){
-      BOOST_FOREACH( unsigned short & value , mesh->usIndexArray )
+      BOOST_FOREACH( unsigned short & value , mesh->usIndexArray ){
         textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+      }
       tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
       indexElement->InsertEndChild( text );
     }
     else{
-      BOOST_FOREACH( unsigned int & value , mesh->uiIndexArray )
+      BOOST_FOREACH( unsigned int & value , mesh->uiIndexArray ){
         textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+      }
       tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
       indexElement->InsertEndChild( text );
     }
@@ -335,8 +394,9 @@ void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEl
   vertexElement->SetAttribute( "count" , count );
   if( XML_FORMAT == format ){
     std::string textStr;
-    BOOST_FOREACH( float & value , mesh->vertexArray )
+    BOOST_FOREACH( float & value , mesh->vertexArray ){
       textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
+    }
     tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
     vertexElement->InsertEndChild( text );
   }
@@ -348,14 +408,40 @@ void makeTransformElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEleme
   tinyxml2::XMLElement * transformElement = xmlFile.NewElement( "ChsMatrix" );
   transformElement->SetAttribute( "id", "transform" );
   std::string textStr;
-  for( int i=0;i<4;i++)
-    for( int j=0;j<4;j++)
+  for( int i=0;i<4;i++){
+    for( int j=0;j<4;j++){
       textStr.append( boost::lexical_cast<std::string>( mesh->transform[i][j] ) ).append( " " );
+    }
+  }
   tinyxml2::XMLText * valueText = xmlFile.NewText( textStr.c_str() );
   transformElement->InsertEndChild( valueText );
   meshElement->InsertEndChild( transformElement );
 }
 
+//--------------------------------------------------------------------------------------------------
+void makeAnimCurveElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
+  tinyxml2::XMLElement * animCurveSetElement = xmlFile.NewElement( "ChsAnimCurveSet" );
+  for(int i = 0; i < CHS_ANIMCURVE_MAX; i++ ){
+    std::vector<AnimCurve> & animCurves = animCurveList[i];
+    int size = animCurves.size();
+    if( size > 0 ){
+      tinyxml2::XMLElement * animCurveElement = xmlFile.NewElement( "ChsAnimCurve" );
+      animCurveElement->SetAttribute( "name", animCurveNames[i].asChar() );
+      animCurveElement->SetAttribute( "count", size );
+      std::string textStr;
+      for( int curveUnitCount = 0; curveUnitCount < size; curveUnitCount++ ){
+        const AnimCurve & animCurve = animCurves[curveUnitCount];
+        textStr.append( boost::lexical_cast<std::string>( animCurve.time ) ).append( " " );
+        textStr.append( boost::lexical_cast<std::string>( animCurve.type ) ).append( " " );
+        textStr.append( boost::lexical_cast<std::string>( animCurve.value ) ).append( " " );
+      }
+      tinyxml2::XMLText * valueText = xmlFile.NewText( textStr.c_str() );
+      animCurveElement->InsertEndChild( valueText );
+      animCurveSetElement->InsertEndChild( animCurveElement );
+    }
+  }
+  meshElement->InsertEndChild( animCurveSetElement );
+}
 //--------------------------------------------------------------------------------------------------
 void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * modelElement ){
   tinyxml2::XMLElement * meshElement = xmlFile.NewElement( "ChsMesh" );
@@ -363,13 +449,18 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
   meshElement->SetAttribute( "id", meshId.asChar() );
   makeAttributeElement( POSITION, meshElement );
   makeAttributeElement( NORMAL, meshElement );
-  if( mesh->hasUV && mesh->hasTexture )
+  if( mesh->hasUV && mesh->hasTexture ){
     makeAttributeElement( TEXCOORD0, meshElement );
-  if( mesh->hasVertexColor )
+  }
+  if( mesh->hasVertexColor ){
     makeAttributeElement( COLOR, meshElement );
+  }
   makeVertexBufferElement( mesh, meshElement );
   makeIndexBufferElement( mesh, meshElement );
   makeTransformElement( mesh, meshElement );
+  if( mesh->isAnimated ){
+    makeAnimCurveElement( mesh, meshElement );
+  }
   makeMaterialElement( fnMesh, mesh, meshElement );
   modelElement->InsertEndChild( meshElement );
 }
@@ -406,16 +497,11 @@ void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
         indexCount++;
       }
       if( index == -1 ){
-        VertexUnit unit;
-        unit.uvId = uvId;
-        unit.vertexId = vertexId;
         index = vertexList.size();
+        VertexUnit unit = { vertexId, uvId };
         vertexList += unit;
       }
-      if( mesh->isShort )
-        mesh->usIndexArray += index;
-      else
-        mesh->uiIndexArray += index;
+      mesh->addIndexValue( index );
     }
   }
 }
@@ -425,13 +511,15 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   //check uv
   mesh->hasUV = fnMesh.numUVs() > 0;
   MFloatArray uArray, vArray;
-  if( mesh->hasUV && mesh->hasTexture )
+  if( mesh->hasUV && mesh->hasTexture ){
     fnMesh.getUVs( uArray, vArray );
+  }
   //check vertex color
   mesh->hasVertexColor = fnMesh.numColors() > 0;
   MColorArray colors;
-  if( mesh->hasVertexColor )
+  if( mesh->hasVertexColor ){
     fnMesh.getVertexColors( colors );
+  }
   BOOST_FOREACH( VertexUnit & unit, vertexList ){
     int vertexId = unit.vertexId;
     int uvId = unit.uvId;
@@ -439,13 +527,15 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
     MVector normal;
     fnMesh.getPoint( vertexId, pos, MSpace::kObject );
     pos.cartesianize();
-    mesh->vertexArray += pos.x, pos.y,pos.z;
-    fnMesh.getVertexNormal( vertexId,true,normal, MSpace::kObject );
-    mesh->vertexArray += normal.x, normal.y,normal.z;
-    if( mesh->hasUV && mesh->hasTexture )
-      mesh->vertexArray += uArray[uvId], vArray[uvId];
-    if( mesh->hasVertexColor )
-      mesh->vertexArray += colors[vertexId].r, colors[vertexId].g, colors[vertexId].b, colors[vertexId].a;
+    mesh->addPosition( pos );
+    fnMesh.getVertexNormal( vertexId, true, normal, MSpace::kObject );
+    mesh->addNormal( normal );
+    if( mesh->hasUV && mesh->hasTexture ){
+      mesh->addUV( uArray[uvId], vArray[uvId] );
+    }
+    if( mesh->hasVertexColor ){
+      mesh->addColor( colors[vertexId] );
+    }
   }
 }
 
@@ -456,7 +546,7 @@ void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void processMaterial( MFnMesh & fnMesh ){
+void processMaterial( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
   MObjectArray shaders;
   MIntArray faceIndices;
   fnMesh.getConnectedShaders( 0, shaders, faceIndices );
@@ -466,88 +556,152 @@ void processMaterial( MFnMesh & fnMesh ){
   surfaceShader.connectedTo( materials, true, true);
   MObject materialNode = materials[0].node();
   getMaterialAttributeAtChannel( DIFFUSE_COLOR, materialNode );
+  mesh->hasTexture = materialChannels[DIFFUSE_COLOR].textureFileName.empty() ? false : true;
 }
 
 //--------------------------------------------------------------------------------------------------
-MStatus processMesh( MDagPath & dagPath ){
-  MStatus status;
-  MFnDagNode dagNode( dagPath, &status );
-  if ( dagNode.isIntermediateObject() || 
-      !dagPath.hasFn( MFn::kMesh ) ||
-       dagPath.hasFn( MFn::kTransform ) )
-    return MStatus::kFailure;
-  
-  MFnMesh fnMesh( dagPath, &status );
-  if( MStatus::kFailure == status)
-    return MStatus::kFailure;
-
-  processMaterial( fnMesh );
-
-  boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
-  mesh->hasTexture = materialChannels[DIFFUSE_COLOR].textureFileName.empty() ? false : true;
+void processMeshTransform( MDagPath & dagPath, boost::shared_ptr<ChsMesh> & mesh ){
   MMatrix transform = dagPath.inclusiveMatrix();
-  
   transform.get( mesh->transform );
-  
-  meshList.push_back( mesh );
-  makeBinaryPart( fnMesh, mesh );
-  makeXMLPart( fnMesh, mesh, modelElement );
+}
+
+//--------------------------------------------------------------------------------------------------
+ChsAnimCurveName convertCurveName( MString strName ){
+  MStringArray strArray;
+  strName.split( '_', strArray );
+  strName = strArray[strArray.length()-1];
+  for( int i = 0; i < CHS_ANIMCURVE_MAX; i++ ){
+    if( strName == animCurveNames[i] ){
+      return (ChsAnimCurveName)i;
+    }
+  }
+  return CHS_ANIMCURVE_INVALID;
+}
+
+//--------------------------------------------------------------------------------------------------
+double getConversionByCurveType( const MFnAnimCurve::AnimCurveType & type ){
+  double conversion = 1.0;
+  switch( type ){
+    case MFnAnimCurve::kAnimCurveTT:
+    case MFnAnimCurve::kAnimCurveUT:
+    case MFnAnimCurve::kAnimCurveUnknown:
+      break;
+    case MFnAnimCurve::kAnimCurveTA:
+    case MFnAnimCurve::kAnimCurveUA:{
+      MAngle angle(1.0);
+      conversion = angle.as( MAngle::uiUnit() );
+      break;
+    }
+    case MFnAnimCurve::kAnimCurveTL:
+    case MFnAnimCurve::kAnimCurveUL:{
+      MDistance distance(1.0);
+      conversion = distance.as( MDistance::uiUnit() );
+      break;
+    }
+    default:
+      break;
+  }
+  return conversion;
+}
+
+//--------------------------------------------------------------------------------------------------
+void processAnimCurve( MDagPath & dagPath ){
+  bool isAnimated = MAnimUtil::isAnimated( dagPath );
+  if( isAnimated ){
+    MGlobal::displayInfo( "animation" );
+    for( int i = 0; i< CHS_ANIMCURVE_MAX; i++ ){
+      animCurveList[i].clear();
+    }
+    MObject dagPathNode = dagPath.node();
+    MStatus status;
+    MItDependencyGraph animIter( dagPathNode,
+                                MFn::kAnimCurve,
+                                MItDependencyGraph::kUpstream,
+                                MItDependencyGraph::kDepthFirst,
+                                MItDependencyGraph::kNodeLevel,
+                                &status );
+    if( status ){
+      for ( animIter.reset(); !animIter.isDone(); animIter.next() ) {
+        MObject anim = animIter.thisNode( &status );
+        MFnAnimCurve animFn( anim, &status );
+        ChsAnimCurveName curveName = convertCurveName( animFn.name() );
+        if( curveName <= CHS_ANIMCURVE_INVALID || curveName >= CHS_ANIMCURVE_MAX )
+          continue;//unknown animation curve name
+        int numKeys = animFn.numKeys();
+        MFnAnimCurve::AnimCurveType type = animFn.animCurveType();
+        double conversion = getConversionByCurveType( type );
+        for ( int key = 0; key < numKeys; key++ ){
+          double time = animFn.time( key ).as( MTime::kSeconds );
+          double value = conversion * animFn.value( key );
+          AnimCurve curveUnit = { time, 0, value };
+          animCurveList[curveName] += curveUnit;
+        }
+      }//for (; !animIter.isDone(); animIter.next()) 
+    }//if( status )
+  }//if( isAnimated )
+
+}
+
+//--------------------------------------------------------------------------------------------------
+void processMesh( MDagPath & dagPath ){
+  MStatus status;
+  if( dagPath.hasFn( MFn::kMesh ) && (dagPath.childCount() == 0) ){
+    MFnMesh fnMesh( dagPath, &status );
+    if( !fnMesh.isIntermediateObject() ){
+      boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
+      processMaterial( fnMesh, mesh );
+      processMeshTransform( dagPath, mesh );
+      
+      makeBinaryPart( fnMesh, mesh );
+      makeXMLPart( fnMesh, mesh, modelElement );
+      
+      meshList.push_back( mesh );
+    }
+  }
+}
+
+//--------------------------------------------------------------------------------------------------
+MStatus processNode( MDagPath & dagPath ){
+  processAnimCurve( dagPath );
+  processMesh( dagPath );
+  for (uint i=0; i<dagPath.childCount(); i++){
+    MObject child = dagPath.child(i);
+    MDagPath childPath = dagPath;
+    childPath.push( child );
+    processNode( childPath );
+  }
   return MStatus::kSuccess;
 }
 
 //--------------------------------------------------------------------------------------------------
 MStatus prepareXMLWithAll( void ){
   MGlobal::displayInfo("prepareXMLWithAll");
-  MStatus status;
-  MItDag itDag( MItDag::kDepthFirst, MFn::kMesh, &status );
-  if( MStatus::kFailure == status ) {
-    MGlobal::displayError("MItDag::MItDag");
-    return MStatus::kFailure;
-  }
-  if( !itDag.instanceCount( true ) ){
+  MItDag dagIter;
+  MFnDagNode worldDag( dagIter.root() );
+  if( !worldDag.instanceCount( true ) ){
     MGlobal::displayInfo("nothing to export!");
     return MStatus::kFailure;
   }
-  while( !itDag.isDone() ){
-    MDagPath dagPath;
-    if( MStatus::kFailure == itDag.getPath(dagPath) ){
-      MGlobal::displayError("MDagPath::getPath");
-      return MStatus::kFailure;
-    }
-
-    MFnDagNode visibleTester( dagPath );
-    if( isVisible( visibleTester, status ) && MStatus::kSuccess == status ){
-      if( MStatus::kFailure == processMesh( dagPath ) )
-        continue;
-    }
-    itDag.next();
-  }
-  return MStatus::kSuccess;
+  MDagPath worldPath;
+  worldDag.getPath( worldPath );
+  return processNode( worldPath );
 }
 
 //--------------------------------------------------------------------------------------------------
 MStatus prepareXMLWithSelection( void ){
   MGlobal::displayInfo("prepareXMLWithSelection");
-  MSelectionList selectionList;
-  if(MStatus::kFailure == MGlobal::getActiveSelectionList(selectionList)){
-    MGlobal::displayError("MGlobal::getActiveSelectionList");
-    return MStatus::kFailure;
-  }
+  MSelectionList activeSelectionList;
+  MGlobal::getActiveSelectionList( activeSelectionList );
+  MItSelectionList iter( activeSelectionList );
   MStatus status;
-  MItSelectionList itSelectionList(selectionList, MFn::kMesh, &status);	
-  if(MStatus::kFailure == status)
-    return MStatus::kFailure;
-
-  for( itSelectionList.reset(); !itSelectionList.isDone(); itSelectionList.next() ){
+  for ( ; !iter.isDone(); iter.next()){								
     MDagPath dagPath;
-    if(MStatus::kFailure == itSelectionList.getDagPath(dagPath)) {
-      MGlobal::displayError("MItSelectionList::getDagPath");
-      return MStatus::kFailure;
+    status = iter.getDagPath( dagPath );
+    if( MStatus::kFailure == processNode( dagPath ) ){
+      break;
     }
-    if( MStatus::kFailure == processMesh( dagPath ) )
-      continue;
   }
-  return MStatus::kSuccess;
+  return status;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -581,10 +735,12 @@ MStatus ChaosExport::writer( const MFileObject &file,	const MString &/*options*/
     status = writeToFile( fullFileName );
   }
 
-  if( MStatus::kSuccess == status )
+  if( MStatus::kSuccess == status ){
     MGlobal::displayInfo("Export to " + fullFileName + " successful!");
-  else
+  }
+  else{
     MGlobal::displayInfo("Failed export to " + fullFileName + " successful!");
+  }
 	return status;
 }
 
@@ -593,9 +749,11 @@ MPxFileTranslator::MFileKind ChaosExport::identifyFile( const MFileObject &file,
   MString name = file.name();
   int nameLength = name.length();
   int extensionLength = extension.length();
-  if ( nameLength > extensionLength )
-    if( name.substring( nameLength - extensionLength, nameLength ) == extension )
+  if ( nameLength > extensionLength ){
+    if( name.substring( nameLength - extensionLength, nameLength ) == extension ){
       return kIsMyFileType;
+    }
+  }
   return kNotMyFileType;
 }
 
@@ -611,8 +769,9 @@ MStatus initializePlugin( MObject obj ){
   MStatus status;
   MFnPlugin plugin( obj, "sniperbat", "1.0", "Any" );
   status = plugin.registerFileTranslator ( "chaosExport", const_cast<char*>( "none" ), ChaosExport::creator );
-  if( !status )
+  if( !status ){
     status.perror( "registerFileTranslator" );
+  }
   return status;
 }
 
@@ -620,8 +779,9 @@ MStatus initializePlugin( MObject obj ){
 MStatus uninitializePlugin( MObject obj ){
   MFnPlugin plugin( obj );
   MStatus status = plugin.deregisterFileTranslator( "chaosExport" );
-  if( !status )
+  if( !status ){
     status.perror( "deregisterFileTranslator" );
+  }
   return status;
 }
 
