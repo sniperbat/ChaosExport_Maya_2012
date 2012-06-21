@@ -1,0 +1,5 @@
+It looks like not good idea to make a exporter for maya.
+MayaAPI is harder to manipulate mesh animation and others then FBXAPI. 
+And a converter convert fbx to chaos model format is better,avoid to make more
+exporters for kinds of 3D tools.
+OK, Stop it,left it as a sample for maya exporter.
