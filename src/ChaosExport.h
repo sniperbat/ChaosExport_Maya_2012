@@ -2,7 +2,6 @@
 #define _CHAOSEXPORT_H
 //--------------------------------------------------------------------------------------------------
 #include <maya/MPxFileTranslator.h>
-#include <maya/MFStream.h>
 
 //--------------------------------------------------------------------------------------------------
 class ChaosExport : public MPxFileTranslator {

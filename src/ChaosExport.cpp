@@ -21,6 +21,7 @@
 #include <maya/MDistance.h>
 
 #include <vector>
+#include <fstream>
 #include <boost/any.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/scoped_ptr.hpp>
@@ -32,10 +33,11 @@ using namespace boost::assign;
 
 #include "ChaosExport.h"
 #include "tinyxml2.h"
+using namespace tinyxml2;
 
 //--------------------------------------------------------------------------------------------------
-static tinyxml2::XMLDocument xmlFile;
-static tinyxml2::XMLElement * modelElement = NULL;
+static XMLDocument xmlFile;
+static XMLElement * modelElement = NULL;
 static MString extension = "chsmodel";
 static MString magicHeader = "chmo";
 
@@ -77,7 +79,8 @@ struct ChsMesh{
   
 };
 
-static std::vector< boost::shared_ptr<ChsMesh> > meshList;
+typedef boost::shared_ptr<ChsMesh> ChsMeshSharedPtr;
+static std::vector< ChsMeshSharedPtr > meshList;
 
 enum Format{
   UNKNOWN_FORMAT = -1,
@@ -173,11 +176,11 @@ void initXMLFile( void ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void writeBinaryPartToFile( ofstream & newFile ){
+void writeBinaryPartToFile( std::ofstream & newFile ){
   int meshCount = meshList.size();
   //write vertex and index data
   for( int meshIdx = 0; meshIdx < meshCount; meshIdx++ ){
-    boost::shared_ptr<ChsMesh> & mesh = meshList[meshIdx];
+    ChsMeshSharedPtr & mesh = meshList[meshIdx];
     int countOfVertex = mesh->vertexArray.size();
     int sizeOfVertex =  countOfVertex * sizeof( float );
     writeValueToFile( newFile, &sizeOfVertex, 1 );
@@ -198,8 +201,8 @@ void writeBinaryPartToFile( ofstream & newFile ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void writeXMLPartToFile( ofstream & newFile ){
-  tinyxml2::XMLPrinter printer( NULL, true );
+void writeXMLPartToFile( std::ofstream & newFile ){
+  XMLPrinter printer( NULL, true );
   xmlFile.Print( &printer );
   int xmlFileSize = printer.CStrSize();
   if( BINARY_FORMAT == format ){
@@ -213,7 +216,7 @@ void writeXMLPartToFile( ofstream & newFile ){
 
 //--------------------------------------------------------------------------------------------------
 MStatus writeToFile( const MString & fullFileName ){
-  ofstream newFile( fullFileName.asChar(), ios::out );
+  std::ofstream newFile( fullFileName.asChar(), ios::out );
   if( !newFile ){
     MGlobal::displayError( fullFileName + ": could not be opened for reading" );
     return MStatus::kFailure;
@@ -233,8 +236,8 @@ MStatus writeToFile( const MString & fullFileName ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeAttributeElement( int type, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * attributeElement = xmlFile.NewElement( "ChsAttribute" );
+void makeAttributeElement( int type, XMLElement * meshElement ){
+  XMLElement * attributeElement = xmlFile.NewElement( "ChsAttribute" );
   attributeElement->SetAttribute( "id", attributes[type].id.asChar() );
   attributeElement->SetAttribute( "stride", attributes[type].stride );
   attributeElement->SetAttribute( "type", attributes[type].type.asChar() );
@@ -258,8 +261,8 @@ enum ChsShaderUniformDataType {
 
 //--------------------------------------------------------------------------------------------------
 template <typename T> void makePropertyElement( const MString & name , ChsShaderUniformDataType type,
-                                               unsigned int count, T value, tinyxml2::XMLElement * materialElement ){
-  tinyxml2::XMLElement * propertyElement = xmlFile.NewElement( "ChsProperty" );
+                                               unsigned int count, T value, XMLElement * materialElement ){
+  XMLElement * propertyElement = xmlFile.NewElement( "ChsProperty" );
   propertyElement->SetAttribute( "name", name.asChar() );
   propertyElement->SetAttribute( "type", type );
   propertyElement->SetAttribute( "count", count );
@@ -270,7 +273,7 @@ template <typename T> void makePropertyElement( const MString & name , ChsShader
 //--------------------------------------------------------------------------------------------------
 template <typename T> void makePropertyElement( const MString & name , ChsShaderUniformDataType type,
                                                unsigned int count, std::vector<T> valueArray,
-                                               tinyxml2::XMLElement * materialElement ){
+                                               XMLElement * materialElement ){
   std::string valueStr;
   BOOST_FOREACH( T & value , valueArray )
   valueStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
@@ -329,10 +332,10 @@ void getMaterialAttributeAtChannel( int channelIndex, MFnDependencyNode fnMateri
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeMaterialAttribute( int channelIndex, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * materialElement ){
+void makeMaterialAttribute( int channelIndex, XMLElement * materialElement ){
   const MaterialChannel & materialChannel = materialChannels[channelIndex];
   if( !materialChannel.textureFileName.empty() ){
-    tinyxml2::XMLElement * textureElement = xmlFile.NewElement( "ChsTexture2D" );
+    XMLElement * textureElement = xmlFile.NewElement( "ChsTexture2D" );
     textureElement->SetAttribute( "src", materialChannel.textureFileName.c_str() );
     MString sampleName = materialChannel.uniformName + "Texture";
     textureElement->SetAttribute( "sampleName", sampleName.asChar() );
@@ -348,10 +351,10 @@ void makeMaterialAttribute( int channelIndex, boost::shared_ptr<ChsMesh> & mesh,
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeMaterialElement( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * materialElement = xmlFile.NewElement( "ChsMaterial" );
+void makeMaterialElement( ChsMeshSharedPtr & mesh, XMLElement * meshElement ){
+  XMLElement * materialElement = xmlFile.NewElement( "ChsMaterial" );
   meshElement->InsertEndChild( materialElement );
-  tinyxml2::XMLElement * shaderElement = xmlFile.NewElement( "ChsVertexShader" );
+  XMLElement * shaderElement = xmlFile.NewElement( "ChsVertexShader" );
   shaderElement->SetAttribute( "src", "Shader.vsh" );
   materialElement->InsertEndChild( shaderElement );
   shaderElement = xmlFile.NewElement( "ChsFragmentShader" );
@@ -359,12 +362,12 @@ void makeMaterialElement( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & m
   materialElement->InsertEndChild( shaderElement );
   makePropertyElement( "hasVertexColor", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasVertexColor, materialElement );
   makePropertyElement( "hasTexture", CHS_SHADER_UNIFORM_1_INT, 1, mesh->hasTexture, materialElement );
-  makeMaterialAttribute( DIFFUSE_COLOR, mesh, materialElement );
+  makeMaterialAttribute( DIFFUSE_COLOR, materialElement );
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * indexElement = xmlFile.NewElement( "ChsIndexBuffer" );
+void makeIndexBufferElement( ChsMeshSharedPtr & mesh, XMLElement * meshElement ){
+  XMLElement * indexElement = xmlFile.NewElement( "ChsIndexBuffer" );
   indexElement->SetAttribute( "isShort" , mesh->isShort );
   int count = mesh->isShort ? mesh->usIndexArray.size() : mesh->uiIndexArray.size();
   indexElement->SetAttribute( "count" , count );
@@ -374,14 +377,14 @@ void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEle
       BOOST_FOREACH( unsigned short & value , mesh->usIndexArray ){
         textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
       }
-      tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+      XMLText * text = xmlFile.NewText( textStr.c_str() );
       indexElement->InsertEndChild( text );
     }
     else{
       BOOST_FOREACH( unsigned int & value , mesh->uiIndexArray ){
         textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
       }
-      tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+      XMLText * text = xmlFile.NewText( textStr.c_str() );
       indexElement->InsertEndChild( text );
     }
   }
@@ -389,8 +392,8 @@ void makeIndexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEle
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * vertexElement = xmlFile.NewElement( "ChsVertexBuffer" );
+void makeVertexBufferElement( ChsMeshSharedPtr & mesh, XMLElement * meshElement ){
+  XMLElement * vertexElement = xmlFile.NewElement( "ChsVertexBuffer" );
   int count = mesh->vertexArray.size();
   vertexElement->SetAttribute( "count" , count );
   if( XML_FORMAT == format ){
@@ -398,15 +401,15 @@ void makeVertexBufferElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEl
     BOOST_FOREACH( float & value , mesh->vertexArray ){
       textStr.append( boost::lexical_cast<std::string>( value ) ).append( " " );
     }
-    tinyxml2::XMLText * text = xmlFile.NewText( textStr.c_str() );
+    XMLText * text = xmlFile.NewText( textStr.c_str() );
     vertexElement->InsertEndChild( text );
   }
   meshElement->InsertEndChild( vertexElement );
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeTransformElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * transformElement = xmlFile.NewElement( "ChsMatrix" );
+void makeTransformElement( ChsMeshSharedPtr & mesh, XMLElement * meshElement ){
+  XMLElement * transformElement = xmlFile.NewElement( "ChsMatrix" );
   transformElement->SetAttribute( "id", "transform" );
   std::string textStr;
   for( int i=0;i<4;i++){
@@ -414,19 +417,19 @@ void makeTransformElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEleme
       textStr.append( boost::lexical_cast<std::string>( mesh->transform[i][j] ) ).append( " " );
     }
   }
-  tinyxml2::XMLText * valueText = xmlFile.NewText( textStr.c_str() );
+  XMLText * valueText = xmlFile.NewText( textStr.c_str() );
   transformElement->InsertEndChild( valueText );
   meshElement->InsertEndChild( transformElement );
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeAnimCurveElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * meshElement ){
-  tinyxml2::XMLElement * animCurveSetElement = xmlFile.NewElement( "ChsAnimCurveSet" );
+void makeAnimCurveElement( ChsMeshSharedPtr & mesh, XMLElement * meshElement ){
+  XMLElement * animCurveSetElement = xmlFile.NewElement( "ChsAnimCurveSet" );
   for(int i = 0; i < CHS_ANIMCURVE_MAX; i++ ){
     std::vector<AnimCurve> & animCurves = animCurveList[i];
     int size = animCurves.size();
     if( size > 0 ){
-      tinyxml2::XMLElement * animCurveElement = xmlFile.NewElement( "ChsAnimCurve" );
+      XMLElement * animCurveElement = xmlFile.NewElement( "ChsAnimCurve" );
       animCurveElement->SetAttribute( "name", animCurveNames[i].asChar() );
       animCurveElement->SetAttribute( "count", size );
       std::string textStr;
@@ -436,18 +439,18 @@ void makeAnimCurveElement( boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLEleme
         textStr.append( boost::lexical_cast<std::string>( animCurve.type ) ).append( " " );
         textStr.append( boost::lexical_cast<std::string>( animCurve.value ) ).append( " " );
       }
-      tinyxml2::XMLText * valueText = xmlFile.NewText( textStr.c_str() );
+      XMLText * valueText = xmlFile.NewText( textStr.c_str() );
       animCurveElement->InsertEndChild( valueText );
       animCurveSetElement->InsertEndChild( animCurveElement );
     }
   }
   meshElement->InsertEndChild( animCurveSetElement );
 }
+
 //--------------------------------------------------------------------------------------------------
-void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tinyxml2::XMLElement * modelElement ){
-  tinyxml2::XMLElement * meshElement = xmlFile.NewElement( "ChsMesh" );
-  MString meshId = fnMesh.name();
-  meshElement->SetAttribute( "id", meshId.asChar() );
+void makeXMLPart( const char * meshId, ChsMeshSharedPtr & mesh, XMLElement * modelElement ){
+  XMLElement * meshElement = xmlFile.NewElement( "ChsMesh" );
+  meshElement->SetAttribute( "id", meshId );
   makeAttributeElement( POSITION, meshElement );
   makeAttributeElement( NORMAL, meshElement );
   if( mesh->hasUV && mesh->hasTexture ){
@@ -462,7 +465,7 @@ void makeXMLPart( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh, tin
   if( mesh->isAnimated ){
     makeAnimCurveElement( mesh, meshElement );
   }
-  makeMaterialElement( fnMesh, mesh, meshElement );
+  makeMaterialElement( mesh, meshElement );
   modelElement->InsertEndChild( meshElement );
 }
 
@@ -474,7 +477,7 @@ struct VertexUnit{
 
 std::vector< VertexUnit > vertexList;
 //--------------------------------------------------------------------------------------------------
-void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void getIndexData( const MFnMesh & fnMesh, ChsMeshSharedPtr & mesh ){
   int numPolygons = fnMesh.numPolygons();
   mesh->isShort = ( numPolygons * 3 < USHRT_MAX );
   vertexList.clear();
@@ -508,7 +511,7 @@ void getIndexData( const MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void getVertexData( MFnMesh & fnMesh, ChsMeshSharedPtr & mesh ){
   //check uv
   mesh->hasUV = fnMesh.numUVs() > 0;
   MFloatArray uArray, vArray;
@@ -541,13 +544,13 @@ void getVertexData( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void makeBinaryPart( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void makeBinaryPart( MFnMesh & fnMesh, ChsMeshSharedPtr & mesh ){
   getIndexData( fnMesh, mesh );
   getVertexData( fnMesh, mesh );
 }
 
 //--------------------------------------------------------------------------------------------------
-void processMaterial( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
+void processMaterial( MFnMesh & fnMesh, ChsMeshSharedPtr & mesh ){
   MObjectArray shaders;
   MIntArray faceIndices;
   fnMesh.getConnectedShaders( 0, shaders, faceIndices );
@@ -561,7 +564,7 @@ void processMaterial( MFnMesh & fnMesh, boost::shared_ptr<ChsMesh> & mesh ){
 }
 
 //--------------------------------------------------------------------------------------------------
-void processMeshTransform( MDagPath & dagPath, boost::shared_ptr<ChsMesh> & mesh ){
+void processMeshTransform( MDagPath & dagPath, ChsMeshSharedPtr & mesh ){
   MMatrix transform = dagPath.inclusiveMatrix();
   transform.get( mesh->transform );
 }
@@ -649,12 +652,13 @@ void processMesh( MDagPath & dagPath ){
   if( dagPath.hasFn( MFn::kMesh ) && (dagPath.childCount() == 0) ){
     MFnMesh fnMesh( dagPath, &status );
     if( !fnMesh.isIntermediateObject() ){
-      boost::shared_ptr<ChsMesh> mesh( new ChsMesh );
+      MGlobal::displayInfo( "mesh" );
+      ChsMeshSharedPtr mesh( new ChsMesh );
       processMaterial( fnMesh, mesh );
       processMeshTransform( dagPath, mesh );
-      
+
       makeBinaryPart( fnMesh, mesh );
-      makeXMLPart( fnMesh, mesh, modelElement );
+      makeXMLPart( fnMesh.name().asChar(), mesh, modelElement );
       
       meshList.push_back( mesh );
     }
@@ -663,7 +667,8 @@ void processMesh( MDagPath & dagPath ){
 
 //--------------------------------------------------------------------------------------------------
 MStatus processNode( MDagPath & dagPath ){
-  processAnimCurve( dagPath );
+  MGlobal::displayInfo( dagPath.fullPathName() );
+  //processAnimCurve( dagPath );
   processMesh( dagPath );
   for (uint i=0; i<dagPath.childCount(); i++){
     MObject child = dagPath.child(i);
